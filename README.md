@@ -1,6 +1,6 @@
 # OpenPoke
 
-A local conversational assistant with persistent task workers, Gmail tools and scheduled work. This fork adds bounded worker discovery, explicit task continuation, request-owned execution and a responsive interface. See [engineering decisions](docs/tradeoffs.md), the [five-minute walkthrough](docs/walkthrough.md) and [validation evidence](docs/validation.md).
+A conversational assistant with persistent task workers, Gmail tools and scheduled work. This fork adds bounded worker discovery, explicit task continuation, request-owned execution and a responsive interface. See [engineering decisions](docs/tradeoffs.md), the [five-minute walkthrough](docs/walkthrough.md) and [validation evidence](docs/validation.md).
 
 ## What changed
 
@@ -9,16 +9,15 @@ A local conversational assistant with persistent task workers, Gmail tools and s
 - **Request ownership:** each request records its worker runs, received partial output and terminal state. Same-worker work is serialized; independent workers can run concurrently. Restart records interruption instead of replaying external actions.
 - **Frontend:** a searchable saved-work sidebar, task history, composed prompt bar, streaming output, activity filters and email-shaped replies. Email subject and recipients share one header. Reply actions are grouped, continuation shows the task name, and status distinguishes a saved draft from an incomplete response.
 
-This is a local, single-process take-home slice. The overload fix bounds the worker directory, not total conversation or worker history. Live testing exposed paraphrase lookup failures and context-limit failures; see [limits](#limits).
+This is a single-process take-home slice. The overload fix bounds the worker directory, not total conversation or worker history. Live testing exposed paraphrase lookup failures and context-limit failures; see [limits](#limits).
 
 ## Setup
 
 Validated on macOS with Python 3.12.13 and Node 26/npm 11. Python dependencies are pinned in `server/requirements.lock`; JavaScript dependencies use `web/package-lock.json`.
 
 ```sh
-git clone https://github.com/Dannny-Babs/openpoke.git
+git clone --branch feat/bounded-task-discovery https://github.com/Dannny-Babs/openpoke.git
 cd openpoke
-git switch feat/bounded-task-discovery
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -r server/requirements.lock
 npm ci --prefix web
@@ -26,7 +25,7 @@ npm ci --prefix web
 
 For uv-managed Python, use `uv venv --python 3.12 .venv`, then `uv pip install --python .venv/bin/python -r server/requirements.lock`.
 
-The implementation branch is local until published. These clone instructions retrieve the implementation only after `feat/bounded-task-discovery` has been pushed; the current local checkout already contains it.
+The implementation is published on [feat/bounded-task-discovery](https://github.com/Dannny-Babs/openpoke/tree/feat/bounded-task-discovery). Review that branch; `main` is unchanged.
 
 Create the local environment file without overwriting an existing one:
 
@@ -89,6 +88,8 @@ PY_SERVER_URL=http://127.0.0.1:8001 npm run dev --prefix web -- --hostname 127.0
 This app has no account-level access control. Keep it on loopback and use one backend process. Live Gmail tools can change a mailbox; the draft display is not a general tool-approval enforcement layer.
 
 ## Checks
+
+The [commit-gate receipt](docs/commit-final-checks-2026-10-11.json) records 55 backend tests and 36 offline browser checks passing. They were not rerun for this publication-status documentation update.
 
 ```sh
 .venv/bin/python scripts/test_backend.py
