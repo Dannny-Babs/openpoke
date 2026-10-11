@@ -1,0 +1,43 @@
+{
+  "record_id": "openpoke-beautiful-ui-20261011",
+  "verified_at": "2026-10-11T00:52:36.019117-04:00",
+  "sources": {
+    "sidebar": {
+      "url": "https://www.beautifului.dev/r/sidebar-nav.json",
+      "registry_sha256": "9c8a060fcbddbcc18cd3c0430fd1b9f6a4b927f048347569f8677d30577c4e2f"
+    },
+    "task-rows": {
+      "url": "https://www.beautifului.dev/r/task-rows.json",
+      "registry_sha256": "a195e9caa440f795fb42d11001e00d29066b78a353850b054069fd32236742ef"
+    }
+  },
+  "checks": {
+    "frontend_lint": "passed",
+    "frontend_production_build": "passed",
+    "first_load_js_kb": 139,
+    "browser_suite": {
+      "passed": 12,
+      "duration_seconds": 22.1
+    },
+    "git_diff_check": "passed"
+  },
+  "new_dependencies": 0,
+  "paid_model_calls": 0,
+  "gmail_actions": 0,
+  "scope": [
+    "sidebar rail/recent rows",
+    "request and active worker status rows",
+    "MIT provenance"
+  ],
+  "limitations": [
+    "scripted workers, not live model quality",
+    "backend checks not rerun; earlier 53-check record retained",
+    "clean install proof predates this presentation change",
+    "no physical-device or screen-reader verification"
+  ],
+  "screenshots": [
+    "ui/beautiful-task-rows-desktop.png",
+    "ui/beautiful-sidebar-desktop.png",
+    "ui/beautiful-integration-mobile.png"
+  ]
+}
