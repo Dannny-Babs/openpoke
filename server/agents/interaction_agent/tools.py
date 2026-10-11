@@ -9,6 +9,7 @@ from ...logging_config import logger
 from ...services.conversation import get_conversation_log
 from ...services.execution import get_agent_roster, get_execution_agent_logs
 from ..execution_agent.batch_manager import ExecutionBatchManager
+from ...services.execution.directory import get_task_directory
 
 
 @dataclass
@@ -22,6 +23,36 @@ class ToolResult:
 
 # Tool schemas for OpenRouter
 TOOL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_execution_agents",
+            "description": "Search the COMPLETE persistent worker directory, including older tasks omitted from the initial shortlist. Results are bounded; use next_cursor for more matches. Empty query browses the directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "maxLength": 2048},
+                    "cursor": {"type": "string", "maxLength": 64},
+                },
+                "required": ["query"], "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_message_to_existing_agent",
+            "description": "Reuse the exact existing worker identified by the directory ID. Never creates a replacement. Use this after directory search, especially when its display name is truncated.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                    "instructions": {"type": "string"},
+                },
+                "required": ["task_id", "instructions"], "additionalProperties": False,
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -109,36 +140,27 @@ _EXECUTION_BATCH_MANAGER = ExecutionBatchManager()
 
 
 # Create or reuse execution agent and dispatch instructions asynchronously
-def send_message_to_agent(agent_name: str, instructions: str) -> ToolResult:
+def send_message_to_agent(agent_name: str, instructions: str, *, require_existing: bool = False) -> ToolResult:
     """Send instructions to an execution agent."""
+    if not isinstance(agent_name, str) or not agent_name.strip():
+        return ToolResult(success=False, payload={"error": "A nonempty agent name is required"})
+    if get_task_directory().has_collision(agent_name):
+        return ToolResult(success=False, payload={"error": "This name shares a legacy history file with another task. Choose a distinct name for new work; existing mixed histories need manual resolution."})
+    from ...services.execution.request_context import current_request
+    context = current_request.get()
+    if context is None:
+        return ToolResult(success=False, payload={"error": "Worker execution requires a request owner"})
     roster = get_agent_roster()
     roster.load()
     existing_agents = set(roster.get_agents())
     is_new = agent_name not in existing_agents
 
+    if is_new and require_existing:
+        return ToolResult(success=False, payload={"error": "Task no longer exists. Search again without creating a replacement."})
     if is_new:
         roster.add_agent(agent_name)
 
-    get_execution_agent_logs().record_request(agent_name, instructions)
-
-    action = "Created" if is_new else "Reused"
-    logger.info(f"{action} agent: {agent_name}")
-
-    async def _execute_async() -> None:
-        try:
-            result = await _EXECUTION_BATCH_MANAGER.execute_agent(agent_name, instructions)
-            status = "SUCCESS" if result.success else "FAILED"
-            logger.info(f"Agent '{agent_name}' completed: {status}")
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.error(f"Agent '{agent_name}' failed: {str(exc)}")
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        logger.error("No running event loop available for async execution")
-        return ToolResult(success=False, payload={"error": "No event loop available"})
-
-    loop.create_task(_execute_async())
+    context.coordinator.register_worker(agent_name, instructions, _EXECUTION_BATCH_MANAGER)
 
     return ToolResult(
         success=True,
@@ -148,6 +170,21 @@ def send_message_to_agent(agent_name: str, instructions: str) -> ToolResult:
             "new_agent_created": is_new,
         },
     )
+
+
+def search_execution_agents(query: str, cursor: Optional[str] = None) -> ToolResult:
+    try:
+        return ToolResult(success=True, payload=get_task_directory().page(query, cursor))
+    except ValueError as exc:
+        return ToolResult(success=False, payload={"error": str(exc)})
+
+
+def send_message_to_existing_agent(task_id: str, instructions: str) -> ToolResult:
+    try:
+        name = get_task_directory().resolve(task_id)
+    except KeyError:
+        return ToolResult(success=False, payload={"error": "Task no longer exists. Search again; do not create a replacement for this follow-up."})
+    return send_message_to_agent(name, instructions, require_existing=True)
 
 
 # Send immediate message to user and record in conversation history
@@ -175,7 +212,7 @@ def send_draft(
 
     message = f"To: {to}\nSubject: {subject}\n\n{body}"
 
-    log.record_reply(message)
+    log.record_draft(to, subject, body)
     logger.info(f"Draft recorded for: {to}")
 
     return ToolResult(
@@ -185,6 +222,7 @@ def send_draft(
             "to": to,
             "subject": subject,
         },
+        user_message=message,
         recorded_reply=True,
     )
 
@@ -225,6 +263,10 @@ def handle_tool_call(name: str, arguments: Any) -> ToolResult:
         else:
             return ToolResult(success=False, payload={"error": "Invalid arguments format"})
 
+        if name == "search_execution_agents":
+            return search_execution_agents(**args)
+        if name == "send_message_to_existing_agent":
+            return send_message_to_existing_agent(**args)
         if name == "send_message_to_agent":
             return send_message_to_agent(**args)
         if name == "send_message_to_user":

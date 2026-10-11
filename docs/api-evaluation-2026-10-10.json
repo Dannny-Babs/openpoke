@@ -1,0 +1,75 @@
+{
+  "cases": [
+    {
+      "ack_ms": 2,
+      "first_partial_ms": 2063,
+      "terminal_ms": 7246,
+      "case": "exact continuation",
+      "request_id": "27eccafc-c257-4caa-a76d-eb48778d1570",
+      "status": "succeeded",
+      "error": null,
+      "expected_task_id": "79b45a1bc6f0adcdbee9febd81479fd1f4cfde535c80eed54c91a937905714b8",
+      "actual_task_ids": [
+        "79b45a1bc6f0adcdbee9febd81479fd1f4cfde535c80eed54c91a937905714b8"
+      ],
+      "partial_lengths": [
+        2,
+        129
+      ],
+      "passed": true,
+      "provider_calls": 4,
+      "evaluation_outcome": "passed"
+    },
+    {
+      "ack_ms": 4,
+      "first_partial_ms": 7079,
+      "terminal_ms": 13651,
+      "case": "older worker model reuse",
+      "request_id": "72460d56-59b7-47e6-ba09-c3f4338c6281",
+      "status": "succeeded",
+      "error": null,
+      "expected_task_id": "ce987d68fde257d0a2316cb6dec56e3651f857e0dca8d8fa5456eb5daef5742a",
+      "actual_task_ids": [
+        "ce987d68fde257d0a2316cb6dec56e3651f857e0dca8d8fa5456eb5daef5742a"
+      ],
+      "partial_lengths": [
+        4,
+        141,
+        213,
+        355,
+        552,
+        705,
+        798
+      ],
+      "passed": true,
+      "provider_calls": 6,
+      "evaluation_outcome": "passed"
+    },
+    {
+      "ack_ms": 5,
+      "first_partial_ms": null,
+      "terminal_ms": 23,
+      "case": "separate new task",
+      "request_id": "a3ba8044-7c44-47f9-90f9-ffcf1b3d8078",
+      "status": "failed",
+      "error": "Model test call budget exhausted; no automatic retry",
+      "expected_task_id": null,
+      "actual_task_ids": [],
+      "partial_lengths": [],
+      "passed": false,
+      "provider_calls": 0,
+      "evaluation_outcome": "blocked_by_reservation_cap"
+    }
+  ],
+  "evidence": "Live local HTTP API with actual OpenRouter model responses; fictional temporary histories; Gmail/external tools/background jobs disabled",
+  "model": "anthropic/claude-sonnet-4",
+  "limitations": [
+    "Single sample per successful case; no baseline latency comparison",
+    "No live fallback-search, ambiguous paraphrase, full long-history, Gmail or schedule integration validation",
+    "A budget-blocked case is not evidence of a routing failure"
+  ],
+  "semantic_review": {
+    "continuation": "Correct candidate-to-recruiter draft, Friday availability and review response; still asks about sending although Gmail is disabled",
+    "reuse": "Correct Lisbon history references and two distinct suggestions; explicitly leaves opening hours unverified"
+  }
+}

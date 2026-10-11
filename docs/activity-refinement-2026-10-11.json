@@ -1,0 +1,89 @@
+{
+  "record_id": "activity-refinement-2026-10-11",
+  "recorded_at": "2026-10-11T02:00:06-04:00",
+  "scope": "Presentation and activity navigation only; no backend or dependency changes",
+  "demonstrated_defects": [
+    {
+      "issue": "View request carried a pending quote from a different saved task into All messages",
+      "evidence": "Manual in-app-browser reproduction; corrected regressions fail at quote count on previous production build at desktop and mobile",
+      "fix": "Clear pending excerpt on intentional activity navigation; preserve unsent draft and existing composer task target"
+    },
+    {
+      "issue": "Mobile activity table pushed the View request action beyond the visible table",
+      "evidence": "390x844 automated screenshot from initial passing suite",
+      "fix": "Keep task, status and action columns on mobile; show origin/time below task name; assert action bounds and zero table overflow"
+    }
+  ],
+  "refinements": [
+    "Clear activity search preserves selected status filter and focuses input",
+    "Show all activity resets query/filter and focuses input without dispatch",
+    "Activity search focus style matches the message navigator; 16px mobile input",
+    "Saved-task count handles singular task and filtered list is labeled Search results"
+  ],
+  "checks": {
+    "final_browser_suite": {
+      "passed": 24,
+      "failed": 0,
+      "seconds": 26.7,
+      "output_directory": "/tmp/openpoke-activity-mobile-final-results"
+    },
+    "earlier_browser_suite": {
+      "passed": 24,
+      "seconds": 25.6,
+      "limitation": "Offscreen mobile table action was identified in screenshot afterward; stronger assertion and corrected layout verified by final run"
+    },
+    "before_fix_regressions": {
+      "failed": 2,
+      "output_directory": "/tmp/openpoke-activity-before-corrected-results",
+      "expected_failure": "Quote review count expected zero, observed one"
+    },
+    "test_setup_note": "Initial exact saved-row selector ignored the row date metadata; that interrupted attempt was not counted as a product failure. Corrected selector established the actual quote regression.",
+    "lint": "passed with no ESLint rule warnings/errors; final build also performs lint/types",
+    "production_build": "passed; page 43.9kB, first-load JS 156kB",
+    "git_diff_check": "passed",
+    "backend_tests": "not rerun this frontend-only pass; previous 55-test result retained",
+    "fresh_install": "not rerun; dependencies unchanged"
+  },
+  "manual_final_observations": [
+    "Activity View request focuses its exact user message and removes pending reminder quote",
+    "Unsent text preserved after View request",
+    "Clear search focuses input and keeps Needs review filter",
+    "Show all activity restores All filter and three loaded receipts",
+    "Escape restores Activity trigger focus and saved-task reading context"
+  ],
+  "mobile_evidence": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "source": "Playwright portable suite and saved screenshot",
+    "input_font_size": "16px",
+    "table_horizontal_overflow": false,
+    "view_request_action_inside_table": true,
+    "in_app_browser_viewport_note": "Override did not apply to this turn's background test tab; mobile proof comes from explicit Playwright viewport, not a manual mobile claim"
+  },
+  "boundaries": {
+    "paid_model_calls": 0,
+    "gmail_actions": 0,
+    "manual_requests_submitted": 0,
+    "real_history_cleared": false,
+    "push": false,
+    "deploy": false,
+    "submit": false,
+    "physical_device": "not tested",
+    "screen_reader": "not tested",
+    "live_model_accuracy": "not evaluated"
+  },
+  "files": [
+    "web/components/ui/ActivityTable.tsx",
+    "web/components/tasks/TaskDrawer.tsx",
+    "web/app/page.tsx",
+    "web/app/globals.css",
+    "web/tests/workspace.spec.ts"
+  ],
+  "screenshots": [
+    "ui/openpoke-activity-empty-final.png",
+    "ui/openpoke-activity-recovery-final.png",
+    "ui/openpoke-activity-mobile-final.png"
+  ]
+}

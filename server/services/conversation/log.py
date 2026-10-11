@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 import threading
 from html import escape, unescape
 from pathlib import Path
@@ -68,6 +69,14 @@ class ConversationLog:
     def _append(self, tag: str, payload: str) -> str:
         timestamp = now_in_user_timezone("%Y-%m-%d %H:%M:%S")
         entry = self._formatter(tag, timestamp, str(payload))
+        from ..execution.request_context import current_request
+        context = current_request.get()
+        attrs = f' id="{uuid.uuid4()}"'
+        if context:
+            attrs += f' request_id="{context.request_id}"'
+            if context.task_id:
+                attrs += f' task_id="{context.task_id}"'
+        entry = entry.replace(f"<{tag} ", f"<{tag}{attrs} ", 1)
         with self._lock:
             try:
                 with self._path.open("a", encoding="utf-8") as handle:
@@ -78,6 +87,8 @@ class ConversationLog:
                     extra={"error": str(exc), "tag": tag, "path": str(self._path)},
                 )
                 raise
+        if context and tag in {"poke_reply", "poke_draft"}:
+            context.replies += 1
         self._notify_summarization()
         return timestamp
 
@@ -145,6 +156,11 @@ class ConversationLog:
         timestamp = self._append("poke_reply", content)
         self._working_memory_log.append_entry("poke_reply", content, timestamp)
 
+    def record_draft(self, to: str, subject: str, body: str) -> None:
+        content = f"To: {to}\nSubject: {subject}\n\n{body}"
+        timestamp = self._append("poke_draft", content)
+        self._working_memory_log.append_entry("poke_reply", content, timestamp)
+
     def record_wait(self, reason: str) -> None:
         """Record a wait marker that should not reach the user-facing chat history."""
         timestamp = self._append("wait", reason)
@@ -174,21 +190,19 @@ class ConversationLog:
 
     def to_chat_messages(self) -> List[ChatMessage]:
         messages: List[ChatMessage] = []
-        for tag, timestamp, payload in self.iter_entries():
-            normalized_timestamp = timestamp or None
-            if tag == "user_message":
-                messages.append(
-                    ChatMessage(role="user", content=payload, timestamp=normalized_timestamp)
-                )
-            elif tag == "poke_reply":
-                messages.append(
-                    ChatMessage(
-                        role="assistant", content=payload, timestamp=normalized_timestamp
-                    )
-                )
-            elif tag == "wait":
-                # Wait markers are orchestration metadata and must not surface to the user
+        with self._lock:
+            lines = self._path.read_text(encoding="utf-8").splitlines() if self._path.exists() else []
+        for line in lines:
+            parsed = self._parse_line(line)
+            if not parsed:
                 continue
+            tag, timestamp, payload = parsed
+            if tag not in {"user_message", "poke_reply", "poke_draft"}:
+                continue
+            attrs = dict(_ATTR_PATTERN.findall(line[:line.find(">")]))
+            messages.append(ChatMessage(role="user" if tag == "user_message" else "draft" if tag == "poke_draft" else "assistant",
+                content=payload, timestamp=timestamp or None, id=attrs.get("id"),
+                request_id=attrs.get("request_id"), task_id=attrs.get("task_id")))
         return messages
 
     def clear(self) -> None:

@@ -1,0 +1,66 @@
+{
+  "record_id": "navigation-checks-2026-10-11",
+  "recorded_at": "2026-10-11T01:50:20-04:00",
+  "scope": "Navigation refinement, no backend or dependency changes",
+  "manual_observations": [
+    "On the previous build, opening and canceling Your messages changed the selected saved task to All messages.",
+    "On the previous build, New task left a quoted follow-up review that could restore the previous task target.",
+    "On the final build, cancel preserves the saved task and restores Your messages trigger focus.",
+    "Desktop saved-task search found the fictional reading reminder; inspection preserved unsent text.",
+    "On mobile, New task clears quoted review and preserves unsent input with composer focus.",
+    "Message search filters loaded user requests without dispatch."
+  ],
+  "before_fix": {
+    "cancel_regression": "failed on previous production build",
+    "new_task_regressions": "failed on previous production build at desktop and mobile after correcting test setup to use an exact @ task target",
+    "initial_fixture_error": "Initial New task tests lacked task metadata; corrected before establishing product failure"
+  },
+  "checks": {
+    "portable_browser_suite": {
+      "passed": 21,
+      "failed": 0,
+      "seconds": 27.2,
+      "command": "npm run test:browser -- --output=/tmp/openpoke-navigation-final-results",
+      "output_directory": "/tmp/openpoke-navigation-final-results",
+      "environment": "disposable offline backend/frontend on 8003/3013; intercepted fixtures and real loopback HTTP scripted workers"
+    },
+    "lint": "passed; no ESLint rule warnings/errors",
+    "production_build": "passed; 156kB first-load JS",
+    "git_diff_check": "passed",
+    "backend_tests": "not rerun this presentation-only pass; prior 55-test result remains historical",
+    "fresh_dependency_install": "not rerun; dependencies unchanged"
+  },
+  "mobile_observation": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "document_width": 390,
+    "message_search_font_size": "16px",
+    "message_search_dialog_width": 352,
+    "message_search_dialog_left": 19,
+    "physical_device": false
+  },
+  "boundaries": {
+    "paid_model_calls": 0,
+    "gmail_actions": 0,
+    "real_history_cleared": false,
+    "push": false,
+    "deployment": false,
+    "submission": false,
+    "live_model_accuracy": "not evaluated",
+    "screen_reader": "not evaluated"
+  },
+  "screenshots": [
+    "ui/openpoke-navigation-desktop-final.png",
+    "ui/openpoke-navigation-mobile-final.png",
+    "ui/openpoke-navigation-mobile-search-final.png"
+  ],
+  "implementation_files": [
+    "web/app/page.tsx",
+    "web/app/globals.css",
+    "web/components/chat/ChatMessages.tsx",
+    "web/components/chat/MessageNavigator.tsx",
+    "web/tests/workspace.spec.ts"
+  ]
+}

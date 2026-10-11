@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 
 export type Settings = {
   timezone: string;
@@ -103,12 +103,24 @@ export default function SettingsModal({
   onClose,
   settings,
   onSave,
+  onClearHistory,
+  demo = false,
+  liveTest = false,
 }: {
   open: boolean;
   onClose: () => void;
   settings: Settings;
   onSave: (s: Settings) => void;
+  onClearHistory: () => void;
+  demo?: boolean;
+  liveTest?: boolean;
 }) {
+  const restrictedMode = demo || liveTest;
+  const modeDescription = liveTest
+    ? "Isolated live model test: temporary data and model responses only. Gmail and external actions are disabled."
+    : "Offline demo: temporary sample data and scripted responses. No model or mailbox is connected.";
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { const element = dialog.current; if (open && !element?.open) element?.showModal(); if (!open && element?.open) element.close(); }, [open]);
   const [timezone, setTimezone] = useState(settings.timezone);
   const [connectingGmail, setConnectingGmail] = useState(false);
   const [isRefreshingGmail, setIsRefreshingGmail] = useState(false);
@@ -159,6 +171,7 @@ export default function SettingsModal({
   }, [gmailConnId]);
 
   useEffect(() => {
+    if (restrictedMode) return;
     try {
       const savedConnected = localStorage.getItem('gmail_connected') === 'true';
       const savedConnId = localStorage.getItem('gmail_connection_request_id') || '';
@@ -170,7 +183,7 @@ export default function SettingsModal({
         setGmailStatusMessage(`Connected as ${savedEmail}`);
       }
     } catch {}
-  }, []);
+  }, [restrictedMode]);
 
   const gmailProfileDetails = useMemo(() => {
     if (!gmailProfile) return [] as { label: string; value: string }[];
@@ -191,6 +204,7 @@ export default function SettingsModal({
   }, [gmailProfile]);
 
   const handleConnectGmail = useCallback(async () => {
+    if (restrictedMode) return;
     try {
       setConnectingGmail(true);
       setGmailStatusMessage('');
@@ -228,9 +242,10 @@ export default function SettingsModal({
     } finally {
       setConnectingGmail(false);
     }
-  }, [ensureUserId]);
+  }, [ensureUserId, restrictedMode]);
 
   const refreshGmailStatus = useCallback(async () => {
+    if (restrictedMode) return;
     const userId = readStoredUserId();
     const connectionRequestId = readStoredConnectionRequestId();
     if (!userId && !connectionRequestId) {
@@ -304,9 +319,10 @@ export default function SettingsModal({
     } finally {
       setIsRefreshingGmail(false);
     }
-  }, [gmailConnId, readStoredConnectionRequestId, readStoredUserId]);
+  }, [gmailConnId, readStoredConnectionRequestId, readStoredUserId, restrictedMode]);
 
   const handleDisconnectGmail = useCallback(async () => {
+    if (restrictedMode) return;
     if (typeof window !== 'undefined') {
       const proceed = window.confirm('Disconnect Gmail from OpenPoke?');
       if (!proceed) return;
@@ -346,45 +362,50 @@ export default function SettingsModal({
     } finally {
       setIsDisconnecting(false);
     }
-  }, [readStoredConnectionRequestId, readStoredUserId]);
+  }, [readStoredConnectionRequestId, readStoredUserId, restrictedMode]);
 
   useEffect(() => {
     setTimezone(settings.timezone);
   }, [settings]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || restrictedMode) return;
     void refreshGmailStatus();
-  }, [open, refreshGmailStatus]);
+  }, [open, refreshGmailStatus, restrictedMode]);
 
-  if (!open) return null;
+
 
   const connectButtonLabel = connectingGmail ? 'Opening…' : gmailConnected ? 'Reconnect' : 'Connect Gmail';
   const refreshButtonLabel = isRefreshingGmail ? 'Refreshing…' : 'Refresh status';
   const disconnectButtonLabel = isDisconnecting ? 'Disconnecting…' : 'Disconnect';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+    <dialog ref={dialog} className="settings-dialog" aria-labelledby="settings-title" onCancel={onClose} onClose={onClose}>
       <div className="card w-full max-w-lg p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Settings</h2>
+          <h2 id="settings-title" className="text-lg font-semibold">Settings</h2>
           <button onClick={onClose} className="rounded-md p-2 hover:bg-gray-100" aria-label="Close settings">
             ✕
           </button>
         </div>
+        <details className="history-settings"><summary>History and saved work</summary><p>Clearing removes all messages, saved task histories and reminders. This cannot be undone.</p><button type="button" className="text-button" onClick={onClearHistory}>Clear history</button></details>
+        {restrictedMode && <p className="notice mb-4" role="status">{modeDescription} Saved local preferences stay unchanged.</p>}
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Timezone</label>
+            <label htmlFor="settings-timezone" className="mb-1 block text-sm font-medium text-gray-700">Timezone</label>
             <input
+              id="settings-timezone"
               className="input"
               type="text"
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               placeholder="e.g. America/New_York, Europe/London"
+              disabled={restrictedMode}
               readOnly={!timezone}
+              aria-describedby="settings-timezone-help"
             />
-            <p className="mt-1 text-xs text-gray-500">
-              {timezone ? 'Auto-detected from browser. Edit to override.' : 'Will be auto-detected on next page load.'}
+            <p id="settings-timezone-help" className="mt-1 text-xs text-gray-500">
+              {restrictedMode ? "Timezone updates are disabled in this mode. Your saved timezone is preserved." : timezone ? 'Auto-detected from browser. Edit to override.' : 'Will be auto-detected on next page load.'}
             </p>
           </div>
           <div className="pt-2">
@@ -394,21 +415,21 @@ export default function SettingsModal({
                 <div>
                   <div className="text-sm font-semibold text-gray-900">Gmail (via Composio)</div>
                   <p className="mt-1 text-sm text-gray-600">
-                    Connect Gmail to unlock email search, drafting, and automations inside OpenPoke.
+                    {restrictedMode ? "Gmail is disabled in this mode. You can review drafts and copy them manually." : "Connect Gmail to unlock email search, drafting, and automations inside OpenPoke."}
                   </p>
                 </div>
                 <span
                   className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${
-                    gmailConnected
+                    !restrictedMode && gmailConnected
                       ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
                       : 'bg-amber-50 text-amber-700 ring-amber-200'
                   }`}
                 >
-                  {gmailConnected ? 'Connected' : 'Not connected'}
+                  {restrictedMode ? 'Disabled in this mode' : gmailConnected ? 'Connected' : 'Not connected'}
                 </span>
               </div>
 
-              {gmailConnected ? (
+              {!restrictedMode && gmailConnected ? (
                 <div className="mt-4 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-gray-500">Connected account</div>
@@ -430,7 +451,7 @@ export default function SettingsModal({
                 </div>
               ) : (
                 <div className="mt-4 rounded-lg border border-dashed border-gray-200 p-3 text-sm text-gray-500" aria-live="polite">
-                  {gmailStatusMessage || 'Complete the connection to view your Gmail account details here.'}
+                  {restrictedMode ? 'No Gmail connection or status request will be made in this mode.' : gmailStatusMessage || 'Complete the connection to view your Gmail account details here.'}
                 </div>
               )}
 
@@ -439,7 +460,7 @@ export default function SettingsModal({
                   type="button"
                   className="btn"
                   onClick={handleConnectGmail}
-                  disabled={connectingGmail || isRefreshingGmail || isDisconnecting}
+                  disabled={restrictedMode || connectingGmail || isRefreshingGmail || isDisconnecting}
                   aria-busy={connectingGmail}
                 >
                   {connectButtonLabel}
@@ -448,17 +469,17 @@ export default function SettingsModal({
                   type="button"
                   className="rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={refreshGmailStatus}
-                  disabled={isRefreshingGmail || connectingGmail}
+                  disabled={restrictedMode || isRefreshingGmail || connectingGmail}
                   aria-busy={isRefreshingGmail}
                 >
                   {refreshButtonLabel}
                 </button>
-                {gmailConnected && (
+                {!restrictedMode && gmailConnected && (
                   <button
                     type="button"
                     className="rounded-md border border-transparent bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={handleDisconnectGmail}
-                    disabled={isDisconnecting || connectingGmail}
+                    disabled={restrictedMode || isDisconnecting || connectingGmail}
                     aria-busy={isDisconnecting}
                   >
                     {disconnectButtonLabel}
@@ -482,6 +503,6 @@ export default function SettingsModal({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

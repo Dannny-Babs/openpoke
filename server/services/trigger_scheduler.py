@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, Set
 
@@ -32,6 +33,8 @@ class TriggerScheduler:
         self._task: Optional[asyncio.Task[None]] = None
         self._running = False
         self._in_flight: Set[int] = set()
+        self._executions: Set[asyncio.Task] = set()
+        self._held_occurrences = set()
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
@@ -54,6 +57,11 @@ class TriggerScheduler:
                     pass
                 self._task = None
                 logger.info("Trigger scheduler stopped")
+            executions = list(self._executions)
+            for task in executions:
+                task.cancel()
+            await asyncio.gather(*executions, return_exceptions=True)
+            self._executions.clear()
 
     async def _run(self) -> None:
         try:
@@ -72,10 +80,14 @@ class TriggerScheduler:
             return
 
         for trigger in due_triggers:
+            if (trigger.id, trigger.agent_name, trigger.next_trigger) in self._held_occurrences:
+                continue
             if trigger.id in self._in_flight:
                 continue
             self._in_flight.add(trigger.id)
-            asyncio.create_task(self._execute_trigger(trigger), name=f"trigger-{trigger.id}")
+            task = asyncio.create_task(self._execute_trigger(trigger), name=f"trigger-{trigger.id}")
+            self._executions.add(task)
+            task.add_done_callback(self._executions.discard)
 
     async def _execute_trigger(self, trigger: TriggerRecord) -> None:
         try:
@@ -89,16 +101,21 @@ class TriggerScheduler:
                     "scheduled_for": trigger.next_trigger,
                 },
             )
-            execution_manager = ExecutionBatchManager()
-            result = await execution_manager.execute_agent(
-                trigger.agent_name,
-                instructions,
-            )
-            if result.success:
+            from .execution.request_coordinator import get_request_coordinator
+            from .execution.directory import task_id
+            coordinator = get_request_coordinator()
+            occurrence = (trigger.id, trigger.agent_name, trigger.next_trigger)
+            submission_id = str(uuid.uuid5(uuid.NAMESPACE_URL, repr(occurrence)))
+            request = coordinator.submit(instructions, task_id=task_id(trigger.agent_name), origin="schedule", submission_id=submission_id)
+            outcome = await coordinator.wait(request["request_id"])
+            if outcome["status"] == "interrupted":
+                self._held_occurrences.add(occurrence)
+                self._service.record_failure(trigger, "Held: execution interrupted; effects may have occurred. Review manually before retrying.")
+                return  # Do not advance or clear an unknown-effect occurrence.
+            if outcome["status"] == "succeeded":
                 self._handle_success(trigger, fired_at)
             else:
-                error_text = result.error or result.response
-                self._handle_failure(trigger, fired_at, error_text)
+                self._handle_failure(trigger, fired_at, outcome["error"] or outcome["status"])
         except Exception as exc:  # pragma: no cover - defensive
             self._handle_failure(trigger, _utc_now(), str(exc))
             logger.exception(
@@ -142,7 +159,7 @@ class TriggerScheduler:
 
         metadata = "\n".join(f"- {line}" for line in metadata_lines)
         return (
-            f"Trigger fired at {_isoformat(fired_at)} (UTC).\n"
+            "Scheduled trigger occurrence (execution time is recorded in request status).\n"
             f"Scheduled occurrence time: {scheduled_for}.\n\n"
             f"Metadata:\n{metadata}\n\n"
             f"Payload:\n{trigger.payload}"

@@ -1,0 +1,78 @@
+{
+  "record_id": "composer-refinement-2026-10-11",
+  "recorded_at": "2026-10-11T02:20:50-04:00",
+  "scope": "Frontend task-context and prompt-menu refinement; backend and dependencies unchanged",
+  "before_fix": {
+    "output_directory": "/tmp/openpoke-composer-before-results",
+    "failed_regressions": 4,
+    "issues": [
+      "Changing from a reminder quote to Nora retained the reminder quote: desktop and mobile",
+      "Shortcut button inherited @Nora query and showed zero options",
+      "Selecting a new reply reused previous custom instruction"
+    ],
+    "manual_reproductions": [
+      "Reminder quote remained while Nora was the chosen target",
+      "Shortcut button showed No matches when @Nora was present"
+    ]
+  },
+  "changes": [
+    "Explicit continuation clears a pending quote owned by a different worker; matching-worker quote is preserved",
+    "Removing the target clears task-owned quote and focuses composer without losing draft text",
+    "All messages navigation clears pending quote review",
+    "Shortcut button ignores the task-search query and appends templates on a separate paragraph, preserving existing text",
+    "Task-search loading/error applies only to the task picker, so stale search state cannot block slash-command keyboard selection",
+    "Send and form submission remain disabled/guarded while a suggestion menu is open; Escape deliberately dismisses it",
+    "Quote content/task key remounts review state for a changed selection; no prop-reset effect; custom instruction bounded to 2048 characters"
+  ],
+  "checks": {
+    "browser_suite": {
+      "passed": 29,
+      "failed": 0,
+      "seconds": 28.7,
+      "output_directory": "/tmp/openpoke-composer-final-results",
+      "environment": "intercepted fixtures plus disposable offline scripted-worker HTTP on 8003/3013"
+    },
+    "lint": "passed with no rule warnings/errors; final build also checks lint and types",
+    "production_build": "passed; page 44kB and first-load JS 156kB",
+    "git_diff_check": "passed",
+    "backend_tests": "not rerun; prior 55-test result remains historical",
+    "fresh_install": "not rerun; no dependency changes"
+  },
+  "new_browser_coverage": [
+    "Different-worker quote discarded on desktop and 390x844 mobile",
+    "Matching-worker quote preserved by explicit Continue",
+    "Removing selected worker clears its quote and restores draft focus",
+    "Shortcuts show all three choices despite pending @ search and support keyboard insertion",
+    "Unresolved and empty task menus disable Send until deliberately dismissed",
+    "Changed reply resets custom instruction and default choice"
+  ],
+  "manual_final_observations": [
+    "Shortcut menu offers draft/compare/summarize while @Nora text exists",
+    "ArrowDown/Enter appends Compare on a separate paragraph and returns composer focus",
+    "Send disabled with Nora task picker open",
+    "Choosing Nora removes pending reminder quote, preserves Continue this idea input and focuses composer"
+  ],
+  "boundaries": {
+    "paid_model_calls": 0,
+    "gmail_actions": 0,
+    "manual_submissions": 0,
+    "real_history_cleared": false,
+    "push": false,
+    "deploy": false,
+    "submit": false,
+    "live_model_quality": "not evaluated",
+    "physical_device": "not tested",
+    "screen_reader": "not tested"
+  },
+  "review": "Condensed React component/state review; keyed reset and derived picker state; no new package or extra provider requests",
+  "files": [
+    "web/app/page.tsx",
+    "web/components/ui/PromptBar.tsx",
+    "web/components/ui/PromptReviewCard.tsx",
+    "web/tests/workspace.spec.ts"
+  ],
+  "screenshots": [
+    "ui/openpoke-composer-shortcuts-final.png",
+    "ui/openpoke-composer-review-final.png"
+  ]
+}

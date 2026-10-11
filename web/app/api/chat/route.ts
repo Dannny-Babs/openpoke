@@ -28,7 +28,9 @@ export async function POST(req: Request) {
     return new Response('Invalid JSON', { status: 400 });
   }
 
-  const { messages } = body || {};
+  const { messages, task_id, submission_id } = body || {};
+  if (task_id !== undefined && (typeof task_id !== 'string' || !/^[a-f0-9]{64}$/.test(task_id))) return Response.json({ error: 'Invalid selected task.' }, { status: 400 });
+  if (typeof submission_id !== 'string' || !/^[a-f0-9-]{36}$/i.test(submission_id)) return Response.json({ error: 'Missing submission identity.' }, { status: 400 });
   if (!Array.isArray(messages) || messages.length === 0) {
     return new Response('Missing messages', { status: 400 });
   }
@@ -41,18 +43,21 @@ export async function POST(req: Request) {
     system: '',
     messages: uiToOpenAIContent(messages),
     stream: false,
+    submission_id,
+    ...(task_id ? { task_id } : {}),
   };
 
   try {
     const upstream = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/plain, */*' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
+      signal: req.signal,
     });
     const text = await upstream.text();
     return new Response(text, {
       status: upstream.status,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      headers: { 'Content-Type': upstream.headers.get('Content-Type') || 'application/json', 'Cache-Control': 'no-store' },
     });
   } catch (e: any) {
     console.error('[chat-proxy] upstream error', e);

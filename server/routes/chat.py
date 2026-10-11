@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from ..models import ChatHistoryClearResponse, ChatHistoryResponse, ChatRequest
@@ -15,6 +15,15 @@ async def chat_send(
     return await handle_chat_request(payload)
 
 
+@router.get("/requests/{request_id}")
+def request_status(request_id: str):
+    from ..services.execution.request_coordinator import get_request_coordinator
+    body = get_request_coordinator().store.get(request_id)
+    if body is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return body
+
+
 @router.get("/history", response_model=ChatHistoryResponse)
 # Retrieve the conversation history from the log
 def chat_history() -> ChatHistoryResponse:
@@ -23,8 +32,17 @@ def chat_history() -> ChatHistoryResponse:
 
 
 @router.delete("/history", response_model=ChatHistoryClearResponse)
-def clear_history() -> ChatHistoryClearResponse:
+async def clear_history() -> ChatHistoryClearResponse:
     from ..services import get_execution_agent_logs, get_agent_roster
+
+    from ..services.execution.request_coordinator import get_request_coordinator
+    from ..services.trigger_scheduler import get_trigger_scheduler
+    coordinator = get_request_coordinator()
+    scheduler = get_trigger_scheduler()
+    # No awaits between guard and deletion: atomic against dispatch in one event loop.
+    if coordinator.has_active_work() or scheduler._in_flight:
+        raise HTTPException(status_code=409, detail="Wait for active work to finish before clearing history")
+    coordinator.store.clear()
 
     # Clear conversation log
     log = get_conversation_log()

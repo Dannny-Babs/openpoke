@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,6 +12,9 @@ class ChatMessage(BaseModel):
     role: str = Field(..., min_length=1)
     content: str = Field(...)
     timestamp: Optional[str] = Field(default=None)
+    id: Optional[str] = None
+    request_id: Optional[str] = None
+    task_id: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -30,6 +34,8 @@ class ChatRequest(BaseModel):
     model: Optional[str] = None
     system: Optional[str] = None
     stream: bool = True
+    task_id: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
+    submission_id: Optional[UUID] = None
 
     def openrouter_messages(self) -> List[Dict[str, str]]:
         return [msg.as_openrouter() for msg in self.messages if msg.content.strip()]
