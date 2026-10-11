@@ -1,28 +1,10 @@
-interface ChatHeaderProps {
-  onOpenSettings: () => void;
-  onClearHistory: () => void;
-}
-
-export function ChatHeader({ onOpenSettings, onClearHistory }: ChatHeaderProps) {
-  return (
-    <header className="mb-4 flex items-center justify-between">
-      <div className="flex items-center">
-        <h1 className="text-lg font-semibold">OpenPoke 🌴</h1>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          className="rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
-          onClick={onOpenSettings}
-        >
-          Settings
-        </button>
-        <button
-          className="rounded-md border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
-          onClick={onClearHistory}
-        >
-          Clear
-        </button>
-      </div>
-    </header>
-  );
+import { History, PanelLeft, Settings2, ListFilter } from "lucide-react";
+interface ChatHeaderProps { onOpenSettings: () => void; onOpenActivity: () => void; onOpenTasks: () => void; tasksOpen: boolean; onOpenHistory: () => void; }
+export function ChatHeader({ onOpenSettings, onOpenActivity, onOpenTasks, tasksOpen, onOpenHistory }: ChatHeaderProps) {
+  return <header className="chat-header"><div><h1>OpenPoke<span className="brand-dot" aria-hidden="true">.</span></h1></div><nav aria-label="Conversation controls">
+    <button aria-label="Saved tasks" className="quiet-button mobile-tasks-button" onClick={onOpenTasks} aria-haspopup="dialog" aria-expanded={tasksOpen}><PanelLeft size={16} aria-hidden /><span>Saved tasks</span></button>
+    <button aria-label="Your messages" className="text-button history-trigger" onClick={onOpenHistory} aria-haspopup="dialog"><History size={16} aria-hidden /><span>Your messages</span></button>
+    <button aria-label="Activity" className="text-button activity-trigger" onClick={onOpenActivity} aria-haspopup="dialog"><ListFilter size={16} aria-hidden /><span>Activity</span></button>
+    <button aria-label="Settings" className="text-button" onClick={onOpenSettings}><Settings2 size={16} aria-hidden /><span>Settings</span></button>
+  </nav></header>;
 }
