@@ -49,6 +49,7 @@ class ExecutionAgentRuntime:
             # Start conversation with the instruction
             messages = [{"role": "user", "content": instructions}]
             tools_executed: List[str] = []
+            tool_failures: List[str] = []
             final_response: Optional[str] = None
 
             for iteration in range(self.MAX_TOOL_ITERATIONS):
@@ -84,6 +85,7 @@ class ExecutionAgentRuntime:
                     if not tool_name:
                         logger.warning("Tool call missing name: %s", tool_call)
                         failure = {"error": "Tool call missing name; unable to execute."}
+                        tool_failures.append(failure["error"])
                         tool_message = {
                             "role": "tool",
                             "tool_call_id": call_id or "unknown_tool",
@@ -97,7 +99,13 @@ class ExecutionAgentRuntime:
                     tools_executed.append(tool_name)
                     logger.info(f"[{self.agent.name}] Executing tool: {tool_name}")
 
+                    from ...services.execution.request_context import current_request
+                    context = current_request.get()
+                    if context and tool_name in self.tool_registry:
+                        context.coordinator.tool_activity(tool_name, "running")
                     success, result = await self._execute_tool(tool_name, tool_args)
+                    if context and tool_name in self.tool_registry:
+                        context.coordinator.tool_activity(tool_name, "succeeded" if success else "failed")
 
                     if success:
                         logger.info(f"[{self.agent.name}] Tool {tool_name} completed successfully")
@@ -106,6 +114,7 @@ class ExecutionAgentRuntime:
                         error_detail = result.get("error") if isinstance(result, dict) else str(result)
                         logger.warning(f"[{self.agent.name}] Tool {tool_name} failed: {error_detail}")
                         record_payload = error_detail
+                        tool_failures.append(f"{tool_name}: {error_detail}")
 
                     self.agent.record_tool_execution(
                         tool_name,
@@ -130,8 +139,9 @@ class ExecutionAgentRuntime:
 
             return ExecutionResult(
                 agent_name=self.agent.name,
-                success=True,
+                success=not tool_failures,
                 response=final_response,
+                error="; ".join(tool_failures) if tool_failures else None,
                 tools_executed=tools_executed
             )
 
@@ -153,7 +163,14 @@ class ExecutionAgentRuntime:
         """Make an LLM call."""
         tools_to_send = self.tool_schemas if with_tools else None
         logger.info(f"[{self.agent.name}] Calling LLM with model: {self.model}, tools: {len(tools_to_send) if tools_to_send else 0}")
+        from ...services.execution.request_context import current_request
+        context = current_request.get()
+        on_content = None
+        if context and context.run_id:
+            context.coordinator.begin_completion()
+            on_content = context.coordinator.stream_content
         return await request_chat_completion(
+            on_content=on_content,
             model=self.model,
             messages=messages,
             system=system_prompt,
@@ -174,8 +191,10 @@ class ExecutionAgentRuntime:
             if isinstance(args, str):
                 try:
                     args = json.loads(args) if args else {}
-                except json.JSONDecodeError:
-                    args = {}
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError("Invalid tool arguments; tool was not executed") from exc
+            if not isinstance(args, dict):
+                raise RuntimeError("Tool arguments must be an object; tool was not executed")
 
             if name:
                 tool_calls.append({
@@ -231,6 +250,8 @@ class ExecutionAgentRuntime:
             result = tool_func(**arguments)
             if inspect.isawaitable(result):
                 result = await result
+            if isinstance(result, dict) and (result.get("error") or result.get("success") is False or result.get("successful") is False):
+                return False, result
             return True, result
         except Exception as e:
             return False, {"error": str(e)}

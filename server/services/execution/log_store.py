@@ -6,7 +6,10 @@ import re
 import threading
 from html import escape, unescape
 from pathlib import Path
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
+from datetime import datetime, timezone
+from itertools import islice
+from collections import deque
 
 from ...logging_config import logger
 from ...utils.timezones import now_in_user_timezone
@@ -152,6 +155,45 @@ class ExecutionAgentLogStore:
             else:
                 parts.append(f"<{tag}>{escaped}</{tag}>")
         return "\n".join(parts)
+
+    def last_activity(self, agent_name: str) -> Optional[str]:
+        try:
+            return datetime.fromtimestamp(self._log_path(agent_name).stat().st_mtime, timezone.utc).isoformat()
+        except FileNotFoundError:
+            return None
+        except OSError:
+            return None
+
+    def read_page(self, agent_name: str, offset: int, limit: int) -> Tuple[List[Tuple[str, str, str]], bool]:
+        """Stream a chronological page without loading the entire history."""
+        with self._lock_for(agent_name):
+            try:
+                with self._log_path(agent_name).open(encoding="utf-8") as handle:
+                    parsed = (entry for line in handle if (entry := self._parse_line(line)) is not None)
+                    page = list(islice(parsed, offset, offset + limit + 1))
+            except FileNotFoundError:
+                return [], False
+        return page[:limit], len(page) > limit
+
+    def read_tail_page(self, agent_name: str, limit: int, before: Optional[int] = None):
+        """Scan legacy lines with bounded retained display records and stable record offsets."""
+        page = deque(maxlen=limit)
+        count = 0
+        with self._lock_for(agent_name):
+            try:
+                with self._log_path(agent_name).open(encoding="utf-8") as handle:
+                    for line in handle:
+                        if before is not None and count >= before:
+                            break
+                        entry = self._parse_line(line)
+                        if entry is None:
+                            continue
+                        tag, timestamp, content = entry
+                        page.append((count, (tag, timestamp, content[:2001])))
+                        count += 1
+            except FileNotFoundError:
+                pass
+        return list(page), count
 
     def load_recent(self, agent_name: str, limit: int = 10) -> list[tuple[str, str, str]]:
         """Load recent log entries."""

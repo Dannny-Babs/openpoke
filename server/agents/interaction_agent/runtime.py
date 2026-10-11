@@ -39,6 +39,7 @@ class _LoopSummary:
     user_messages: List[str] = field(default_factory=list)
     tool_names: List[str] = field(default_factory=list)
     execution_agents: Set[str] = field(default_factory=set)
+    tool_errors: List[str] = field(default_factory=list)
 
 
 class InteractionAgentRuntime:
@@ -83,8 +84,9 @@ class InteractionAgentRuntime:
                 self.conversation_log.record_reply(final_response)
 
             return InteractionResult(
-                success=True,
+                success=not summary.tool_errors,
                 response=final_response,
+                error="; ".join(summary.tool_errors) if summary.tool_errors else None,
                 execution_agents_used=len(summary.execution_agents),
             )
 
@@ -99,6 +101,13 @@ class InteractionAgentRuntime:
     # Handle incoming messages from execution agents and generate appropriate responses
     async def handle_agent_message(self, agent_message: str) -> InteractionResult:
         """Process a status update emitted by an execution agent."""
+        from ...services.execution.request_context import current_request
+        if current_request.get() is None:
+            from ...services.execution.request_coordinator import get_request_coordinator
+            coordinator = get_request_coordinator()
+            request = coordinator.submit(agent_message, origin="event")
+            outcome = await coordinator.wait(request["request_id"])
+            return InteractionResult(success=outcome["status"] == "succeeded", response="", error=outcome["error"])
 
         try:
             transcript_before = self._load_conversation_transcript()
@@ -118,8 +127,9 @@ class InteractionAgentRuntime:
                 self.conversation_log.record_reply(final_response)
 
             return InteractionResult(
-                success=True,
+                success=not summary.tool_errors,
                 response=final_response,
+                error="; ".join(summary.tool_errors) if summary.tool_errors else None,
                 execution_agents_used=len(summary.execution_agents),
             )
 
@@ -166,12 +176,14 @@ class InteractionAgentRuntime:
             for tool_call in parsed_tool_calls:
                 summary.tool_names.append(tool_call.name)
 
-                if tool_call.name == "send_message_to_agent":
-                    agent_name = tool_call.arguments.get("agent_name")
+                if tool_call.name in {"send_message_to_agent", "send_message_to_existing_agent"}:
+                    agent_name = tool_call.arguments.get("agent_name") or tool_call.arguments.get("task_id")
                     if isinstance(agent_name, str) and agent_name:
                         summary.execution_agents.add(agent_name)
 
                 result = self._execute_tool(tool_call)
+                if not result.success:
+                    summary.tool_errors.append(f"{tool_call.name}: {result.payload}")
 
                 if result.user_message:
                     summary.user_messages.append(result.user_message)
