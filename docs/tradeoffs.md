@@ -12,7 +12,7 @@ I kept the roster and worker histories, but changed the initial directory to a l
 | Bounded shortlist with full lookup | Preserves old workers without another service | Recall depends on task names and the model's search choices. |
 | Semantic index | Could improve paraphrase recall | Requires indexing, maintenance and evaluation. |
 
-I chose the shortlist and lookup to bound directory input while preserving existing storage. Search matches names, not transcript contents. A live "Portugal art outing" request failed to find the saved Lisbon task. The directory also still scans the saved roster; bounding its output does not make lookup constant-time.
+I chose the shortlist and lookup to bound directory input while preserving existing storage. Eight is an initial engineering limit, not a measured optimum; the byte cap also bounds entries with long names. Tuning these limits needs evaluation of lookup success and model input cost. Search matches names, not transcript contents. A live "Portugal art outing" request failed to find the saved Lisbon task. The directory also still scans the saved roster; bounding its output does not make lookup constant-time.
 
 ## Added feature: Continue this task
 
@@ -23,6 +23,8 @@ This gives users a direct way to reuse existing work. It bypasses the routing de
 ## Execution and persistence
 
 The original shared completion batch could combine unrelated workers' results. I added a [request coordinator](../server/services/execution/request_coordinator.py) so each input owns its worker attempts and final reply. Delegation is capped at three phases. A shared per-worker gate serializes history loading and execution across chat and schedules; different workers can run concurrently.
+
+Request ownership and per-worker ordering support explicit continuation without mixing unrelated results or concurrently overwriting one worker's history. This extends beyond the directory fix; the interface changes make those behaviors visible to the user.
 
 A [SQLite request store](../server/services/execution/request_store.py) records state and submission IDs without migrating the legacy logs. Reusing a submission ID retrieves the same request; a new ID represents an intentional new message. Schedule occurrences also have identities to prevent duplicate dispatch. Clearing history rejects active writers and retains content-free submission markers after removing records.
 
@@ -38,11 +40,13 @@ I adapted free Beautiful UI components and used Base UI dialogs, Lucide icons an
 
 History display starts with a bounded latest page of 20 records and 32,768 serialized UTF-8 bytes. Earlier pages preserve the reading position. This avoids rewriting legacy logs, but loading still scans the file and worker prompts can include full history. Next.js and React were updated to the pinned versions in the lockfile to address the production dependency advisory; development/build-tool advisories remain.
 
-## Remaining context limits
+## Remaining limits and evidence
 
-The change bounds worker-directory input, not the whole model prompt. OpenPoke already has conversation summarization, but this build adds no enforced whole-prompt budget or per-worker compaction. The isolated live harness disables summarization and exposed failures as its conversation grew. A separate-task response also referred back to an earlier unrelated request.
+The change bounds the initial worker directory and each search page, not the whole model prompt. Repeated search results and other tool messages can still accumulate within a routing turn. OpenPoke already has conversation summarization, but this build adds no enforced whole-prompt budget or per-worker compaction. The isolated live harness disables summarization and exposed failures as its conversation grew. A separate-task response also referred back to an earlier unrelated request.
 
-Recorded offline checks cover execution rules and UI behavior. They do not establish broad model routing accuracy or semantic correctness. The small live sample shows useful continuation and separate-task behavior alongside the discovery and context failures. [README checks](../README.md#checks-and-limitations) contains the commands and recorded results.
+Recorded offline checks cover execution rules and UI behavior. They do not establish broad model routing accuracy or semantic correctness, and this documentation update did not rerun them. The small live sample shows useful continuation and separate-task behavior alongside the discovery and context failures. [README checks](../README.md#checks-and-limitations) contains the commands and recorded results.
+
+The isolated demo disables Gmail and external worker actions. The persistent app has no account-level access control or enforced tool approvals, so a public live demo needs those boundaries and a spending limit. Restart interruption reporting also does not provide durable recovery of external actions.
 
 ## With another week
 
